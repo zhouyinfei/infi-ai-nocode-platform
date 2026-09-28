@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.infi.nocode.mapper.UserMapper">
+  <resultMap id="user" type="org.infi.nocode.model.entity.User">
+    <constructor>
+      <idArg column="id" javaType="java.lang.String"/>
+      <arg column="userAccount" javaType="java.lang.String"/>
+      <arg column="userPassword" javaType="java.lang.String"/>
+      <arg column="userName" javaType="java.lang.String"/>
+      <arg column="userAvatar" javaType="java.lang.String"/>
+      <arg column="userProfile" javaType="java.lang.String"/>
+      <arg column="userRole" javaType="java.lang.String"/>
+      <arg column="createTime" javaType="java.time.LocalDateTime"/>
+    </constructor>
+  </resultMap>
+  <select id="byAccount" resultMap="user">select * from `user` where userAccount=#{account} and isDelete=0</select>
+  <select id="byId" resultMap="user">select * from `user` where id=#{id} and isDelete=0</select>
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">insert into `user` (userAccount,userPassword,userName) values (#{account},#{hash},#{account})</insert>
+  <update id="profile">update `user` set userName=#{name},userAvatar=#{avatar},userProfile=#{profile},editTime=CURRENT_TIMESTAMP where id=#{id} and isDelete=0</update>
+  <update id="adminUpdate">update `user` set userName=#{name},userRole=#{role},editTime=CURRENT_TIMESTAMP where id=#{id} and isDelete=0</update>
+  <update id="delete">update `user` set isDelete=1 where id=#{id}</update>
+  <sql id="filter">from `user` where isDelete=0 and (userAccount like #{query} or userName like #{query}) and userAccount like #{account} and coalesce(userName,'') like #{name}</sql>
+  <select id="count" resultType="long">select count(*) <include refid="filter"/></select>
+  <select id="list" resultMap="user">select * <include refid="filter"/> order by id desc limit #{size} offset #{offset}</select>
+</mapper>

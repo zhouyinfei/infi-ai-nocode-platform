@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.infi.nocode.mapper.ChatHistoryMapper">
+  <resultMap id="message" type="org.infi.nocode.model.entity.ChatMessage">
+    <constructor>
+      <idArg column="id" javaType="java.lang.String"/>
+      <arg column="message" javaType="java.lang.String"/>
+      <arg column="messageType" javaType="java.lang.String"/>
+      <arg column="appId" javaType="java.lang.String"/>
+      <arg column="userId" javaType="java.lang.String"/>
+      <arg column="createTime" javaType="java.time.LocalDateTime"/>
+    </constructor>
+  </resultMap>
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">insert into chat_history(appId,userId,messageType,message) values(#{appId},#{userId},#{type},#{text})</insert>
+  <select id="byId" resultMap="message">select * from chat_history where id=#{id}</select>
+  <select id="cursor" resultMap="message">select * from chat_history where id=#{id} and appId=#{appId} and isDelete=0</select>
+  <select id="messages" resultMap="message">
+    select * from chat_history where appId=#{appId} and isDelete=0
+    <if test="beforeId != null">and (createTime&lt;#{beforeTime} or (createTime=#{beforeTime} and id&lt;#{beforeId}))</if>
+    order by createTime desc,id desc limit #{limit}
+  </select>
+  <sql id="filter">
+    from chat_history where isDelete=0 and message like #{query}
+    <if test="appId != null">and appId=#{appId}</if>
+    <if test="userId != null">and userId=#{userId}</if>
+    <if test="type != null">and messageType=#{type}</if>
+    <if test="start != null">and createTime&gt;=#{start}</if>
+    <if test="end != null">and createTime&lt;=#{end}</if>
+  </sql>
+  <select id="count" resultType="long">select count(*) <include refid="filter"/></select>
+  <select id="list" resultMap="message">select * <include refid="filter"/> order by createTime desc,id desc limit #{size} offset #{offset}</select>
+  <update id="delete">update chat_history set isDelete=1 where id=#{id} and isDelete=0</update>
+  <update id="deleteByApp">update chat_history set isDelete=1 where appId=#{appId}</update>
+  <update id="deleteByUser">update chat_history set isDelete=1 where userId=#{userId}</update>
+</mapper>

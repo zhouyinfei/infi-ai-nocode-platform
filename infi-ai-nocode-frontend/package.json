@@ -1,0 +1,27 @@
+{
+  "name": "infi-nocode-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vue-tsc -b && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.5",
+    "lucide-vue-next": "^0.468.0",
+    "marked": "^15.0.12",
+    "vue": "~3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "prettier": "^3.6.2",
+    "typescript": "~5.8.3",
+    "vite": "~8.0.0",
+    "vitest": "^4.1.0",
+    "vue-tsc": "^3.0.0"
+  }
+}

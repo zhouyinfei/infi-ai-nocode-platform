@@ -1,0 +1,88 @@
+server:
+  port: 8765
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: strict
+spring:
+  application:
+    name: infi-nocode
+  datasource:
+    url: jdbc:mysql://localhost:3306/infi_ai_nocode?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: YOUR_MYSQL_USERNAME
+    password: YOUR_MYSQL_PASSWORD
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: YOUR_REDIS_PASSWORD
+      database: 0
+      timeout: 3s
+  session:
+    timeout: 7d
+    redis:
+      namespace: infi:nocode:session
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+  jackson:
+    time-zone: Asia/Shanghai
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: https://ws-pl6el2kmifl7zzb2.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+      api-key: YOUR_API_KEY
+      model-name: deepseek-v4.1-flash
+      timeout: PT120S
+      # HTTP 超时与整次流式生成时限分开，避免持续输出被提前截断。
+      generation-timeout: PT8M
+      # 百炼扩展参数；非思考模式降低网页生成延迟。其他服务不支持时可设为 null。
+      enable-thinking: false
+      max-retries: 2
+      log-requests: true
+      log-responses: true
+      generation-tokens:
+        # 单次输出额度；更换模型时须核对供应商上限。截断后最多自动续写 3 次。
+        html: 16000
+        multi-file: 32000
+        vue-project: 32000
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    default-statement-timeout: 30
+nocode:
+  output-dir: ./tmp/code_output
+  deploy-dir: ./tmp/code_deploy
+  screenshot-dir: ./tmp/screenshots
+  # Nginx listens on 8124 and proxies to this loopback-only port.
+  preview-port: 8125
+  preview-base-url: http://localhost:8124
+  allowed-origin: http://localhost:5173
+  task-timeout: PT10M
+  max-concurrent-tasks: 4
+  max-files: 60
+  max-total-bytes: 2097152
+  node-executable: node
+  vue-builder-dir: ./builder
+  screenshot-enabled: true
+  browser-channel: chrome
+  admin-account: YOUR_ADMIN_ACCOUNT
+  admin-password: YOUR_ADMIN_PASSWORD
+  oss:
+    enabled: false
+    endpoint: YOUR_OSS_ENDPOINT
+    bucket: YOUR_OSS_BUCKET
+    access-key-id: YOUR_OSS_ACCESS_KEY_ID
+    access-key-secret: YOUR_OSS_ACCESS_KEY_SECRET
+    public-base-url: YOUR_OSS_PUBLIC_BASE_URL
+springdoc:
+  api-docs:
+    path: /api/v3/api-docs
+knife4j:
+  enable: true
+logging:
+  level:
+    dev.langchain4j: INFO

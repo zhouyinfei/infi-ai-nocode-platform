@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.infi.nocode.mapper.AppMapper">
+  <resultMap id="app" type="org.infi.nocode.model.entity.App">
+    <constructor>
+      <idArg column="id" javaType="java.lang.String"/>
+      <arg column="appName" javaType="java.lang.String"/>
+      <arg column="cover" javaType="java.lang.String"/>
+      <arg column="initPrompt" javaType="java.lang.String"/>
+      <arg column="codeGenType" javaType="java.lang.String"/>
+      <arg column="deployKey" javaType="java.lang.String"/>
+      <arg column="deployedTime" javaType="java.time.LocalDateTime"/>
+      <arg column="priority" javaType="_int"/>
+      <arg column="userId" javaType="java.lang.String"/>
+      <arg column="createTime" javaType="java.time.LocalDateTime"/>
+      <arg column="updateTime" javaType="java.time.LocalDateTime"/>
+    </constructor>
+  </resultMap>
+  <sql id="active">from app a join `user` u on a.userId=u.id where a.isDelete=0 and u.isDelete=0</sql>
+  <select id="byId" resultMap="app">select a.* <include refid="active"/> and a.id=#{id}</select>
+  <select id="published" resultMap="app">select a.* <include refid="active"/> and a.deployKey=#{key} and a.deployedTime is not null</select>
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">insert into app(appName,initPrompt,codeGenType,userId) values(#{name},#{prompt},#{type},#{owner})</insert>
+  <update id="edit">update app set appName=#{name},editTime=CURRENT_TIMESTAMP where id=#{id} and isDelete=0</update>
+  <update id="adminUpdate">update app set appName=#{name},priority=#{priority},editTime=CURRENT_TIMESTAMP where id=#{id} and isDelete=0</update>
+  <update id="delete">update app set isDelete=1 where id=#{id}</update>
+  <update id="deleteByUser">update app set isDelete=1 where userId=#{userId}</update>
+  <update id="deployed">update app set deployKey=#{key},deployedTime=CURRENT_TIMESTAMP where id=#{id} and isDelete=0</update>
+  <update id="cover">update app set cover=#{cover} where id=#{id} and isDelete=0</update>
+  <sql id="filter">
+    <include refid="active"/>
+    <if test="owner != null">and a.userId=#{owner}</if>
+    <if test="featured">and a.priority&gt;0 and a.deployedTime is not null</if>
+    <if test="type != null">and a.codeGenType=#{type}</if>
+    <if test="priority != null">and a.priority=#{priority}</if>
+    <if test="userId != null">and a.userId=#{userId}</if>
+    and a.appName like #{query}
+  </sql>
+  <select id="count" resultType="long">select count(*) <include refid="filter"/></select>
+  <select id="list" resultMap="app">select a.* <include refid="filter"/> order by a.priority desc,a.id desc limit #{size} offset #{offset}</select>
+  <select id="activeIds" resultType="string">select a.id <include refid="active"/></select>
+  <select id="activeDeployKeys" resultType="string">select deployKey from app where isDelete=0 and deployedTime is not null</select>
+  <select id="activeCovers" resultType="string">select cover from app where isDelete=0 and cover is not null</select>
+</mapper>

@@ -1,0 +1,13 @@
+/target/
+**/node_modules/
+**/dist/
+/tmp/
+/.tools/
+/src/main/resources/application-local.yml
+/.idea/
+*.log
+.DS_Store
+*.iml
+*.tsbuildinfo
+/test-results/
+/playwright-report/
