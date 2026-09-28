@@ -26,6 +26,7 @@ public class AdminController {
     apps = ap;
   }
 
+  /** 校验管理员身份，按关键词、账号和姓名分页查询用户。 */
   @GetMapping("/users")
   public ApiResponse<?> users(
       HttpServletRequest r,
@@ -38,6 +39,7 @@ public class AdminController {
     return ApiResponse.ok(store.users(query, page, pageSize, account, name));
   }
 
+  /** 更新用户姓名和角色，禁止当前管理员取消自己的管理员角色。 */
   @PutMapping("/users/{id}")
   public ApiResponse<?> user(
       @PathVariable String id, @Valid @RequestBody AdminUser body, HttpServletRequest r) {
@@ -50,6 +52,7 @@ public class AdminController {
     return ApiResponse.ok(true);
   }
 
+  /** 校验管理员身份并在事务中删除用户，禁止删除自己或仍具有管理员角色的用户。 */
   @DeleteMapping("/users/{id}")
   @Transactional
   public ApiResponse<?> deleteUser(@PathVariable String id, HttpServletRequest r) {
@@ -61,6 +64,7 @@ public class AdminController {
     return ApiResponse.ok(true);
   }
 
+  /** 校验管理员身份，按关键词、生成类型、优先级和用户分页查询应用。 */
   @GetMapping("/apps")
   public ApiResponse<?> apps(
       HttpServletRequest r,
@@ -75,6 +79,7 @@ public class AdminController {
         store.apps(null, false, query, page, pageSize, codeGenType, priority, userId));
   }
 
+  /** 校验管理员身份及应用是否存在，更新应用名称和优先级。 */
   @PutMapping("/apps/{id}")
   public ApiResponse<?> app(
       @PathVariable String id, @Valid @RequestBody AdminApp body, HttpServletRequest r) {
@@ -85,6 +90,7 @@ public class AdminController {
     return ApiResponse.ok(true);
   }
 
+  /** 校验管理员身份，委托应用服务删除指定应用。 */
   @DeleteMapping("/apps/{id}")
   public ApiResponse<?> deleteApp(@PathVariable String id, HttpServletRequest r) {
     auth.admin(r);
@@ -92,6 +98,7 @@ public class AdminController {
     return ApiResponse.ok(true);
   }
 
+  /** 校验管理员身份，按应用、用户、消息类型和时间范围等条件分页查询消息。 */
   @GetMapping("/messages")
   public ApiResponse<?> messages(
       HttpServletRequest r,
@@ -114,6 +121,7 @@ public class AdminController {
         store.adminMessages(query, appId, userId, messageType, page, pageSize, start, end));
   }
 
+  /** 校验管理员身份，删除指定消息。 */
   @DeleteMapping("/messages/{id}")
   public ApiResponse<?> deleteMessage(@PathVariable String id, HttpServletRequest r) {
     auth.admin(r);

@@ -29,6 +29,7 @@ public class UserController {
     limiter = l;
   }
 
+  /** 按来源地址限制注册频率，校验确认密码及密码字节长度后加密密码并注册用户。 */
   @PostMapping("/register")
   public ApiResponse<?> register(@Valid @RequestBody Register r, HttpServletRequest req) {
     limiter.check("register:" + req.getRemoteAddr(), 5, 3600);
@@ -40,6 +41,7 @@ public class UserController {
     return ApiResponse.ok(user);
   }
 
+  /** 按来源地址限制登录频率，校验账号密码后重建会话并保存登录用户身份。 */
   @PostMapping("/login")
   public ApiResponse<?> login(@Valid @RequestBody Login r, HttpServletRequest req) {
     limiter.check("login:" + req.getRemoteAddr(), 20, 300);
@@ -56,17 +58,20 @@ public class UserController {
     return ApiResponse.ok(user);
   }
 
+  /** 使当前会话失效，退出登录。 */
   @PostMapping("/logout")
   public ApiResponse<?> logout(HttpServletRequest req) {
     if (req.getSession(false) != null) req.getSession(false).invalidate();
     return ApiResponse.ok(true);
   }
 
+  /** 校验登录状态，获取当前用户信息。 */
   @GetMapping("/me")
   public ApiResponse<?> me(HttpServletRequest req) {
     return ApiResponse.ok(auth.require(req));
   }
 
+  /** 校验登录状态和头像地址格式，更新当前用户的昵称、头像及个人简介。 */
   @PutMapping("/me")
   public ApiResponse<?> profile(@Valid @RequestBody Profile r, HttpServletRequest req) {
     var user = auth.require(req);

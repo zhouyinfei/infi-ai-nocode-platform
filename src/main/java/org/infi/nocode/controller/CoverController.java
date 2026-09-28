@@ -15,6 +15,7 @@ public class CoverController {
     this.p = p;
   }
 
+  /** 校验封面文件名并返回本地 PNG 图片，文件名不合法或文件不存在时返回未找到。 */
   @GetMapping("/api/covers/{name}")
   public ResponseEntity<?> cover(@PathVariable String name) {
     if (!name.matches("[0-9]+-[a-f0-9-]{36}\\.png")) return ResponseEntity.notFound().build();

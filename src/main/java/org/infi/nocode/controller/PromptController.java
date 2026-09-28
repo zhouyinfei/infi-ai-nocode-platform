@@ -23,6 +23,7 @@ public class PromptController {
     this.limiter = limiter;
   }
 
+  /** 校验登录状态和调用频率，使用人工智能模型优化用户提交的提示词。 */
   @PostMapping("/optimize")
   public ApiResponse<String> optimize(
       @Valid @RequestBody Optimize body, HttpServletRequest request) {
