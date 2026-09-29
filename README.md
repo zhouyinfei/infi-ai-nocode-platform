@@ -1,6 +1,8 @@
-# Infi NoCode · AI 零代码应用生成平台
+# 造物 AI · 零代码应用生成平台
 
 用自然语言创建网站，支持多轮对话修改、实时生成进度、源码查看、预览、发布和封面截图。
+
+**在线体验：[造物 AI](https://coze.ziyuanzz.online/)**
 
 从一句想法到可预览的前端应用：**描述需求 → AI 生成 → 对话调整 → 预览检查 → 发布网站**。适合制作个人作品集、品牌展示页、活动页，以及带交互的轻量前端工具。
 
@@ -9,6 +11,7 @@
 ## 导航
 
 - [界面预览](#界面预览)
+- [文档](#文档)
 - [已实现功能](#已实现功能)
 - [三种生成类型](#三种生成类型)
 - [项目结构](#项目结构)
@@ -16,6 +19,9 @@
 - [首次初始化](#首次初始化)
 - [创建第一个应用](#创建第一个应用)
 - [构建与测试](#构建与测试)
+- [文件与状态](#文件与状态)
+- [AI 日志与生成约束](#ai-日志与生成约束)
+- [首页示例与代码复用](#首页示例与代码复用)
 - [部署到阿里云（宝塔面板）](#部署到阿里云宝塔面板)
 - [部署注意事项与当前边界](#部署注意事项与当前边界)
 - [常见问题](#常见问题)
@@ -62,6 +68,9 @@
 - [编码计划与阶段验证](编码计划.md)：每一步实现、验证及修复记录。
 - [验证报告](验证报告.md)：自动化测试、真实依赖联调、浏览器验证及未验证项。
 - [参考站功能对照](参考站功能对照.md)：只读观察到的页面与对应实现。
+- [项目提问与需求总结](项目提问与需求总结.md)：开发过程中的问题、需求和复习提纲。
+- [生产环境部署与排障](nginx/PRODUCTION.md)：HTTPS 短路径、预览与封面路由配置。
+- [后端日志说明](docs/backend-logging.md)：日志使用与排查说明。
 
 ## 已实现功能
 
@@ -70,6 +79,8 @@
 - 自动选择 `html`、`multi_file`、`vue_project`；LangChain4j 普通与流式模型调用。
 - 异步生成、SSE 进度与输出、任务状态查询、重复请求去重、同一应用串行操作。
 - 多轮对话、稳定游标分页、AI 消息 Markdown 安全渲染、源码文件查看。
+- 元素选中编辑：在预览中选择元素并描述修改要求；已有作品通过文件工具增量修改，校验及构建成功后才切换版本。
+- 首页“我的作品”和“精选案例”分别搜索、分页，每页最多 6 个应用；卡片提供查看对话、查看已发布作品和创建者信息。
 - 网站预览、桌面与手机视图、独立发布目录、固定发布链接、本地封面截图。
 - 管理员用户管理、应用管理、精选设置、对话筛选和管理。
 - 登录用户可只读查看已发布的精选案例；只有创建者能继续生成、部署。管理员可只读检查所有有效应用。
@@ -96,6 +107,8 @@ infi-ai-nocode-platform/
 ├─ builder/                       生成 Vue 应用使用的固定构建器
 ├─ sql/create_table.sql           数据库与表初始化脚本
 ├─ nginx/nocode.conf              预览和发布入口代理配置
+├─ nginx/nocode-prod.conf         生产 HTTPS 短路径与封面代理配置
+├─ nginx/PRODUCTION.md            生产部署和排障说明
 ├─ docs/screenshots/              README 界面截图
 ├─ tools/                        初始化与浏览器验证工具
 ├─ start-backend.ps1              Windows 后端启动脚本
@@ -152,14 +165,14 @@ if (-not (Test-Path 'src/main/resources/application-local.yml')) {
 | 文件 | 用途 |
 |---|---|
 | `application.yml` | 配置结构完整；公共默认值和敏感项占位值；提交 Git |
-| `application-local.yml` | 本地开发凭据；忽略提交，并从 JAR 排除 |
+| `application-local.yml` | 本地开发凭据；忽略 Git 提交 |
 | `application-prod.yml` | 生产环境凭据；忽略提交，部署时使用 |
 
 Redis 未配置密码时填写空字符串。会话有效期使用 `spring.session.timeout`，公共默认值为 `7d`；例如设为 `3600s` 表示 1 小时。本地配置可覆盖默认值。
 
 管理员使用 `nocode.admin-account` 和 `nocode.admin-password` 初始化，只在账号尚不存在时创建。系统不会把已注册的同名普通账号自动提升为管理员，也不会在重启时重置现有管理员密码。
 
-本地文件被排除在构建资源之外，因此启动时需要显式加载外部配置。IDEA 的程序参数同样可以使用下面 JAR 启动命令中的两个参数。
+启动脚本显式加载本地配置；IDEA 的程序参数也可使用下面 JAR 启动命令中的两个参数。注意：当前 `pom.xml` 没有排除这些环境配置资源，`.gitignore` 只影响 Git，不会阻止 Maven 将文件打包。部署应从不含真实凭据的干净源码目录构建，并在服务器通过外部配置文件加载凭据。
 
 ### 3. 安装前端和固定构建器依赖
 
@@ -219,7 +232,7 @@ Nginx 转发到发布服务，继续使用版本指针切换、访问检查及 V
 3. 提交后进入工作台，等待生成完成，在右侧检查页面效果。
 4. 继续输入修改要求，例如：“把作品展示改成两列，并增加顶部导航。”也可切换到代码面板查看源码。
 5. 切换桌面和手机预览，确认后点击“发布网站”，通过返回的链接访问成果。
-6. 从“我的应用”回到作品，继续编辑或再次发布；后续发布保持同一发布短码。
+6. 从首页“我的作品”卡片点击“查看对话”，继续编辑或再次发布；后续发布保持同一发布短码。需要修改特定元素时，开启“编辑模式”，点击预览中的元素，再输入修改要求。
 
 默认发布链接使用 `localhost:8124`，仅用于本机体验。对外分享前需按[部署说明](#部署注意事项与当前边界)配置可访问的域名和服务。
 
@@ -277,6 +290,8 @@ tmp/
 
 ## AI 日志与生成约束
 
+首次生成使用完整文件输出；已有成功版本时改用工具增量编辑，按需列出、读取、修改、新增或删除草稿文件，最后调用 `finish_edit`。修改已有文件前必须读取，工具编辑最多 24 轮、64 次调用，并受生成总时限约束。模型必须支持工具调用；失败草稿不会替换当前成功版本。下述截断续写说明针对完整文件生成流程。
+
 代码生成的单次输出额度按应用已保存的类型确定：HTML 默认 **16000 tokens**，MULTI_FILE / VUE_PROJECT 默认 **32000 tokens**。在 `langchain4j.open-ai.chat-model.generation-tokens` 下分别配置 `html`、`multi-file`、`vue-project`；必须为正整数，且应按实际模型支持的最大输出设置（不再限制为原来的 7999/19999）。请求通过 `max_tokens` 参数执行此限制；更换模型时请核对供应商文档。本地运行还需同步 `application-local.yml` 的覆盖配置。
 
 模型以 `LENGTH` 结束时，系统携带原始需求和已生成内容自动续写，最多追加 3 次请求，逐字符拼接结果（包括 JSON 字符串和转义序列）。所有轮次共用 `generation-timeout` 总时限，不会无限续写；只有当前轮尚未输出内容时才重试临时网络故障，避免流式内容重复。累计输出另有限额，续写会增加模型调用与 token 消耗。完成后必须通过完整文件 JSON、文件路径和入口校验；重复 JSON 或附加解释会被拒绝，Vue 工程还需通过构建后才更新当前版本。此机制不保证模型一定能正确续接，达到续写次数或总时限仍会提示拆分需求。
@@ -291,17 +306,21 @@ tmp/
 
 `enable-thinking: false` 显式传入百炼扩展参数 `enable_thinking`，降低网页生成等待时间。可改为 `true` 开启思考；更换为不支持此参数的供应商时设为 `null`，不发送该字段。参数依据：[百炼深度思考文档](https://help.aliyun.com/zh/model-studio/deep-thinking)。
 
-网页内容运行于独立端口，并配置 CSP；业务接口校验会话、应用权限与自定义请求头。Vue 构建禁止生成配置和安装脚本，限制输出文件数、体积、内存和构建时间，子进程不继承后端敏感环境变量。固定模板并不等价于操作系统级沙箱，生产环境应使用独立低权限运行账号与受控目录。
+网页内容由独立内部端口提供，并配置 CSP；生产可通过主站 HTTPS 代理访问，同域时启用不带 `allow-same-origin` 的 sandbox。业务接口校验会话、应用权限与自定义请求头。Vue 构建禁止生成配置和安装脚本，限制输出文件数、体积、内存和构建时间，子进程不继承后端敏感环境变量。固定模板并不等价于操作系统级沙箱，生产环境应使用独立低权限运行账号与受控目录。
 
 ## 部署到阿里云（宝塔面板）
 
 ### 1. 服务器环境准备
 
 在宝塔面板安装：
+
 - Nginx
 - MySQL 8.0
 - Redis 7.x
 - JDK 21（通过宝塔 Java 项目管理器或手动安装）
+- 与固定构建器兼容的 Node.js、npm，以及 Chrome（用于封面截图）
+
+将仓库的 `builder/` 目录部署到服务器，在该目录执行 `npm ci --ignore-scripts`。通过 `nocode.vue-builder-dir` 指定其绝对路径，并确保后端运行账号能执行 Node.js 和 Chrome。
 
 ### 2. 数据库初始化
 
@@ -311,28 +330,42 @@ tmp/
 ### 3. 后端部署
 
 ```bash
-# 本地打包
+# 在不含真实 application-local.yml / application-prod.yml 的干净源码目录打包
 mvn clean package -DskipTests
 
 # 上传 target/nocode-0.1.0.jar 到服务器，例如 /data/coze/
 ```
 
 在宝塔「Java 项目」中添加项目：
+
 - 项目类型：SpringBoot
 - 项目路径：`/data/coze/nocode-0.1.0.jar`
 - 项目 JDK：选择已安装的 JDK 21
-- 启动命令：`/www/server/java/jdk-21.0.2/bin/java -jar -Xmx384M -Xms256M /data/coze/nocode-0.1.0.jar --spring.profiles.active=prod`
+- 工作目录：`/data/coze`；JDK 路径替换为服务器实际安装路径。
+- 先完成下一节的外部配置，再启动：
+
+```bash
+java -Xmx384M -Xms256M -jar /data/coze/nocode-0.1.0.jar --spring.profiles.active=prod --spring.config.additional-location=file:/data/coze/config/application-prod.yml
+```
+
+JVM 参数放在 `-jar` 前。上述堆内存值仅为起点，Node 构建和 Chrome 截图还需要额外的进程内存。
 
 ### 4. 生产配置
 
-创建 `src/main/resources/application-prod.yml`（已提供模板），修改以下配置：
+参考仓库公共 `application.yml` 的结构，在服务器创建 `/data/coze/config/application-prod.yml`，填写实际凭据。环境配置被 Git 忽略，不应假定克隆仓库后自带生产配置。
 
 | 配置项 | 说明 |
 |---|---|
 | `spring.datasource` | 服务器 MySQL 连接信息 |
 | `spring.data.redis` | 服务器 Redis 连接信息 |
 | `nocode.allowed-origin` | 前端域名，如 `https://coze.ziyuanzz.online` |
-| `nocode.preview-base-url` | 预览服务域名 |
+| `nocode.preview-base-url` | 当前同域部署填写 `https://coze.ziyuanzz.online`，不带 `:8124` |
+| `nocode.preview-port` | 内部服务端口，默认 `8125`，仅监听回环地址 |
+| `langchain4j.open-ai.chat-model` | 实际模型接口地址、API Key、模型名及额度 |
+| `nocode.admin-account` / `nocode.admin-password` | 首次创建管理员使用的账号与密码 |
+| `nocode.output-dir` / `nocode.deploy-dir` / `nocode.screenshot-dir` | 持久化绝对路径；迁移时保留原文件 |
+| `nocode.vue-builder-dir` / `nocode.node-executable` | 服务器固定构建器目录与 Node 可执行文件 |
+| `nocode.browser-channel` | 默认 `chrome`，服务器需安装相应浏览器 |
 
 ### 5. 前端部署
 
@@ -360,6 +393,8 @@ location /api/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_redirect off;
+    proxy_buffering off;
+    proxy_read_timeout 900s;
 }
 
 location /builder-api/ {
@@ -372,6 +407,16 @@ location /builder-api/ {
 }
 ```
 
+此外，将 [nginx/nocode-prod.conf](nginx/nocode-prod.conf) 上传为 `/www/server/nginx/conf/nocode-prod.conf`，在该网站现有 HTTPS `server {}` **内部**加入：
+
+```nginx
+include /www/server/nginx/conf/nocode-prod.conf;
+```
+
+该 include 必须放在通用 JS、CSS、图片正则 location 之前。它包含 `/api/covers/` 到 8765 的专用代理，以及 `/preview/`、`/site/`、发布短码到 8125 的转发；缺少这些规则可能导致封面 404 或作品预览失败。已有相同 location 时替换原规则，避免重复定义。不要隐藏后端 CSP 响应头。
+
+本地 `nocode.conf` 放在 `http {}` 中；生产 `nocode-prod.conf` 放在现有 HTTPS `server {}` 中，两者不要混用。详细步骤及排查命令见 [生产环境部署与排障](nginx/PRODUCTION.md)。
+
 重载 Nginx：`nginx -t && nginx -s reload`
 
 ### 7. 配置文件说明
@@ -379,15 +424,15 @@ location /builder-api/ {
 | 文件 | 用途 | 环境 |
 |---|---|---|
 | `application.yml` | 配置结构完整；公共默认值和敏感项占位值；提交 Git | 公共 |
-| `application-local.yml` | 本地开发凭据；忽略提交，并从 JAR 排除 | 开发 |
-| `application-prod.yml` | 生产环境凭据；忽略提交 | 生产 |
+| `application-local.yml` | 本地开发凭据；忽略 Git 提交，当前 Maven 未排除打包 | 开发 |
+| 外部 `application-prod.yml` | 放在服务器配置目录，通过 additional-location 加载 | 生产 |
 
-启动时通过 `--spring.profiles.active=local` 或 `--spring.profiles.active=prod` 选择配置。
+启动时通过 `--spring.profiles.active=local` 或 `--spring.profiles.active=prod` 选择环境，外部配置路径通过 `--spring.config.additional-location` 指定。
 
 ## 部署注意事项与当前边界
 
 - 前端静态服务需要 SPA 路由回退；`/api` 转发至 8765，SSE 路由关闭代理缓冲并设置合理超时。修改后端端口时需同步修改前端 Vite 代理。
-- 8124 预览/发布服务使用独立来源；生产应使用独立域名，业务 Cookie 不共享给生成网站。多个生成站点当前共用预览服务来源，不提供跨应用独立 Cookie / localStorage 容器。
+- 本地通过 8124 独立来源访问预览和发布服务；当前生产支持主域名 HTTPS 短路径，同域时通过 iframe 和后端 CSP sandbox 隔离。Nginx 不向作品服务转发 Cookie，也不透传其 Set-Cookie。该模式下生成页面不能使用 localStorage、Cookie，依赖这些能力的示例持久化功能会受限，普通内存交互仍可运行。
 - 生产配置需设置正确的 `nocode.allowed-origin`、`preview-base-url`、文件根目录，并限制 API 文档访问。
 - 当前源码仅生成前端应用；数据管理示例使用浏览器状态，不自动生成业务后端。
 - 不支持多实例任务调度、完整版本回滚和自动迁移生成类型。
@@ -395,7 +440,7 @@ location /builder-api/ {
 
 ## 首页示例与代码复用
 
-首页提供 8 个完整示例提示词，覆盖作品集、品牌官网、习惯追踪、博客、商店、活动页、餐厅及旅行计划。示例目录由 `/api/apps/examples` 返回；保持提示词不变时使用固定生成类型，不调用分类模型。
+首页提供 4 个示例：个人作品集、品牌官网、电商商城和个人博客，每个提示词约 3 行。示例目录由 `/api/apps/examples` 返回；保持提示词不变时使用固定生成类型，不调用分类模型。
 
 同一示例首次成功生成并构建后，源码和构建结果保存在 `nocode.output-dir/examples/` 下，按示例 ID、生成类型和提示词摘要区分。后续用户复制同一份产物到自己的应用版本，不再次调用生成模型或执行 Vue 构建。缓存独立于用户应用，重启、用户修改或删除应用不会改变它，定时产物清理也会保留它。部署时应持久化并备份整个输出目录。现有平台仍按单后端实例运行。
 
@@ -412,4 +457,6 @@ location /builder-api/ {
 | Vue 构建依赖未安装 | 在 builder 目录执行 npm ci --ignore-scripts |
 | 截图失败 | 检查 Chrome 安装及进程启动权限；可调用应用截图重试接口 |
 | 预览失效 | 刷新预览获取新的短期票据；已发布链接不使用预览票据 |
+| 线上作品可访问但预览失败 | 核对 preview-base-url、8125 服务及生产 Nginx include 的顺序；检查 CSP 和票据有效期 |
+| 线上封面 404 | 确保 /api/covers/ 代理至 8765，不被图片正则规则截获；检查 screenshot-dir 中文件是否存在 |
 | 公共配置不能直接运行 | 填写本地配置；公共配置只提供完整结构，不包含有效凭据 |
