@@ -23,13 +23,19 @@ public class ArtifactService {
     }
   }
 
-  /** Retry formatting once; every replacement still passes the full artifact validation. */
+  public static class MissingRequiredFiles extends BusinessException {
+    MissingRequiredFiles(String message) {
+      super(502, message);
+    }
+  }
+
+  /** Retry malformed or incomplete output once; replacements pass full validation. */
   public Artifact parseOrRepair(String raw, CodeGenType type,
       java.util.function.Function<String, String> repair) {
     try {
       return parse(raw, type);
-    } catch (InvalidArtifactJson invalid) {
-      log.info("Repairing artifact JSON once: type={}", type);
+    } catch (InvalidArtifactJson | MissingRequiredFiles invalid) {
+      log.info("Repairing artifact once: type={}, reason={}", type, invalid.getMessage());
       return parse(repair.apply(raw), type);
     }
   }
@@ -90,13 +96,13 @@ public class ArtifactService {
                       "(?s).*(?:from\\s*|import\\s*\\(|import\\s*|url\\s*\\(|(?:src|href)\\s*=\\s*)\\s*['\"](?:[A-Za-z]:|file:).*")))
         throw BusinessException.bad("Vue 文件包含不允许的外部路径引用");
     }
-    if (!names.contains("index.html")) throw BusinessException.bad("生成结果缺少 index.html");
+    if (!names.contains("index.html")) throw new MissingRequiredFiles("生成结果缺少 index.html");
     if (type == CodeGenType.HTML && artifact.files().size() != 1)
       throw BusinessException.bad("HTML 模式只能包含 index.html");
     if (type == CodeGenType.VUE_PROJECT
         && (!names.contains("src/app.vue")
             || (!names.contains("src/main.js") && !names.contains("src/main.ts"))))
-      throw BusinessException.bad("Vue 工程缺少入口或 App.vue");
+      throw new MissingRequiredFiles("Vue 工程缺少 src/main.js（或 src/main.ts）或 src/App.vue");
     return new Artifact(
         artifact.summary() == null
             ? "生成完成"

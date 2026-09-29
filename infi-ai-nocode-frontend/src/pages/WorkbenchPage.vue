@@ -92,14 +92,33 @@ const running = computed(
 );
 type SelectedElement = { tag: string; text: string; selector: string; path: string };
 const previewFrame = ref<HTMLIFrameElement | null>(null);
+const isolatedPreview = computed(() => !!preview.value &&
+  new URL(preview.value, location.href).origin === location.origin);
 const editing = ref(false);
 const editorReady = ref(false);
+const previewProblem = ref("");
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+function monitorPreview() {
+  clearTimeout(previewTimer);
+  previewProblem.value = "";
+  editorReady.value = false;
+  if (!preview.value || !previewFrame.value) return;
+  if (location.protocol === "https:" && new URL(preview.value, location.href).protocol !== "https:") {
+    previewProblem.value = "预览地址未启用 HTTPS，浏览器无法加载。请联系管理员配置 HTTPS 预览服务。";
+    return;
+  }
+  // iframe load also fires for browser error pages; wait for the preview bridge handshake.
+  previewTimer = setTimeout(() => {
+    previewProblem.value = "未能连接到预览页面。请重试或在新窗口打开；若仍无法访问，请管理员检查预览服务的 HTTPS 证书、端口和反向代理配置。";
+  }, 15000);
+}
+watch([preview, previewFrame], monitorPreview, { flush: "post" });
 const selectedElement = ref<SelectedElement | null>(null);
 function syncEditor() {
   if (!preview.value) return;
   previewFrame.value?.contentWindow?.postMessage(
     { type: "infi:editor-mode", enabled: editing.value && !running.value && !readOnly.value },
-    new URL(preview.value, location.href).origin,
+    isolatedPreview.value ? "*" : new URL(preview.value, location.href).origin,
   );
 }
 function clearSelection() {
@@ -113,8 +132,13 @@ function previewLoaded() {
 }
 function receiveEditor(event: MessageEvent) {
   if (!preview.value || event.source !== previewFrame.value?.contentWindow ||
-      event.origin !== new URL(preview.value, location.href).origin) return;
-  if (event.data?.type === "infi:editor-ready") { editorReady.value = true; return; }
+      event.origin !== (isolatedPreview.value ? "null" : new URL(preview.value, location.href).origin)) return;
+  if (event.data?.type === "infi:editor-ready") {
+    clearTimeout(previewTimer);
+    previewProblem.value = "";
+    editorReady.value = true;
+    return;
+  }
   if (!editing.value || running.value || readOnly.value) return;
   if (event.data?.type === "infi:editor-clear") { selectedElement.value = null; return; }
   const element = event.data?.element;
@@ -152,7 +176,7 @@ async function refreshPreview() {
     }
     if (app.value?.deployKey)
       publishedUrl.value = new URL(
-        `/${app.value.deployKey}`,
+        `/${app.value.deployKey}/`,
         preview.value,
       ).href;
   } catch (e) {
@@ -279,6 +303,7 @@ onMounted(async () => {
   }
 });
 onBeforeUnmount(() => {
+  clearTimeout(previewTimer);
   window.removeEventListener("message", receiveEditor);
   disposed = true;
   events?.close();
@@ -484,6 +509,10 @@ onBeforeUnmount(() => {
             /></a>
           </div>
         </div>
+        <div v-if="tab === 'preview' && previewProblem" class="workspace-notice error" role="alert">
+          {{ previewProblem }}
+          <button @click="refreshPreview">重试预览</button>
+        </div>
         <div
           v-if="tab === 'preview'"
           class="preview-surface"
@@ -495,7 +524,7 @@ onBeforeUnmount(() => {
             :src="preview"
             @load="previewLoaded"
             title="生成网站预览"
-            sandbox="allow-scripts allow-same-origin allow-forms"
+            :sandbox="isolatedPreview ? 'allow-scripts allow-forms' : 'allow-scripts allow-same-origin allow-forms'"
             referrerpolicy="no-referrer"
           ></iframe>
           <div v-else class="preview-empty">

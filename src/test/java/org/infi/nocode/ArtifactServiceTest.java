@@ -73,6 +73,35 @@ class ArtifactServiceTest {
   }
 
   @Test
+  void repairsMissingVueFilesOnceAndRejectsIncompleteOrUnsafeReplacement() throws Exception {
+    var required = List.of(
+        new GeneratedFile("index.html", "<div id=\"app\"></div>"),
+        new GeneratedFile("src/main.ts", "import App from './App.vue'"),
+        new GeneratedFile("src/App.vue", "<template>商城</template>"));
+    String complete = json.writeValueAsString(new Artifact("商城", required));
+    for (int missing = 0; missing < required.size(); missing++) {
+      var partial = new ArrayList<>(required);
+      partial.remove(missing);
+      String incomplete = json.writeValueAsString(new Artifact("商城", partial));
+      var calls = new java.util.concurrent.atomic.AtomicInteger();
+      assertThat(files.parseOrRepair(incomplete, CodeGenType.VUE_PROJECT, raw -> {
+        assertThat(raw).isEqualTo(incomplete);
+        calls.incrementAndGet();
+        return complete;
+      }).files()).containsExactlyElementsOf(required);
+      assertThat(calls.get()).isEqualTo(1);
+      assertThatThrownBy(() -> files.parseOrRepair(incomplete, CodeGenType.VUE_PROJECT, raw -> {
+        calls.incrementAndGet();
+        return incomplete;
+      })).isInstanceOf(ArtifactService.MissingRequiredFiles.class);
+      assertThat(calls.get()).isEqualTo(2);
+      assertThatThrownBy(() -> files.parseOrRepair(incomplete, CodeGenType.VUE_PROJECT,
+          raw -> complete.replace("src/App.vue", "../App.vue")))
+          .isInstanceOf(BusinessException.class).hasMessageContaining("非法文件路径");
+    }
+  }
+
+  @Test
   void doesNotRepairUnsafePathsAndHandlesNullOutput() {
     assertThatThrownBy(() -> files.parseOrRepair(
         "{\"files\":[{\"path\":\"../index.html\",\"content\":\"x\"}]}",

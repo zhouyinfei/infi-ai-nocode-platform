@@ -16,6 +16,7 @@
 - [首次初始化](#首次初始化)
 - [创建第一个应用](#创建第一个应用)
 - [构建与测试](#构建与测试)
+- [部署到阿里云（宝塔面板）](#部署到阿里云宝塔面板)
 - [部署注意事项与当前边界](#部署注意事项与当前边界)
 - [常见问题](#常见问题)
 
@@ -151,7 +152,8 @@ if (-not (Test-Path 'src/main/resources/application-local.yml')) {
 | 文件 | 用途 |
 |---|---|
 | `application.yml` | 配置结构完整；公共默认值和敏感项占位值；提交 Git |
-| `application-local.yml` | 实际 MySQL、Redis、AI、管理员及可选 OSS 凭据；忽略提交，并从 JAR 排除 |
+| `application-local.yml` | 本地开发凭据；忽略提交，并从 JAR 排除 |
+| `application-prod.yml` | 生产环境凭据；忽略提交，部署时使用 |
 
 Redis 未配置密码时填写空字符串。会话有效期使用 `spring.session.timeout`，公共默认值为 `7d`；例如设为 `3600s` 表示 1 小时。本地配置可覆盖默认值。
 
@@ -291,9 +293,99 @@ tmp/
 
 网页内容运行于独立端口，并配置 CSP；业务接口校验会话、应用权限与自定义请求头。Vue 构建禁止生成配置和安装脚本，限制输出文件数、体积、内存和构建时间，子进程不继承后端敏感环境变量。固定模板并不等价于操作系统级沙箱，生产环境应使用独立低权限运行账号与受控目录。
 
+## 部署到阿里云（宝塔面板）
+
+### 1. 服务器环境准备
+
+在宝塔面板安装：
+- Nginx
+- MySQL 8.0
+- Redis 7.x
+- JDK 21（通过宝塔 Java 项目管理器或手动安装）
+
+### 2. 数据库初始化
+
+1. 在宝塔「数据库」中创建数据库 `infi_ai_nocode`
+2. 导入 `sql/create_table.sql`
+
+### 3. 后端部署
+
+```bash
+# 本地打包
+mvn clean package -DskipTests
+
+# 上传 target/nocode-0.1.0.jar 到服务器，例如 /data/coze/
+```
+
+在宝塔「Java 项目」中添加项目：
+- 项目类型：SpringBoot
+- 项目路径：`/data/coze/nocode-0.1.0.jar`
+- 项目 JDK：选择已安装的 JDK 21
+- 启动命令：`/www/server/java/jdk-21.0.2/bin/java -jar -Xmx384M -Xms256M /data/coze/nocode-0.1.0.jar --spring.profiles.active=prod`
+
+### 4. 生产配置
+
+创建 `src/main/resources/application-prod.yml`（已提供模板），修改以下配置：
+
+| 配置项 | 说明 |
+|---|---|
+| `spring.datasource` | 服务器 MySQL 连接信息 |
+| `spring.data.redis` | 服务器 Redis 连接信息 |
+| `nocode.allowed-origin` | 前端域名，如 `https://coze.ziyuanzz.online` |
+| `nocode.preview-base-url` | 预览服务域名 |
+
+### 5. 前端部署
+
+```bash
+# 本地构建
+cd infi-ai-nocode-frontend
+npm run build
+
+# 上传 dist/ 目录内容到服务器，例如 /www/wwwroot/coze.ziyuanzz.online/
+```
+
+### 6. Nginx 配置
+
+在宝塔网站配置中添加：
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.html;
+}
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8765;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_redirect off;
+}
+
+location /builder-api/ {
+    proxy_pass http://127.0.0.1:8765;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_redirect off;
+}
+```
+
+重载 Nginx：`nginx -t && nginx -s reload`
+
+### 7. 配置文件说明
+
+| 文件 | 用途 | 环境 |
+|---|---|---|
+| `application.yml` | 配置结构完整；公共默认值和敏感项占位值；提交 Git | 公共 |
+| `application-local.yml` | 本地开发凭据；忽略提交，并从 JAR 排除 | 开发 |
+| `application-prod.yml` | 生产环境凭据；忽略提交 | 生产 |
+
+启动时通过 `--spring.profiles.active=local` 或 `--spring.profiles.active=prod` 选择配置。
+
 ## 部署注意事项与当前边界
 
-- 目前是本机可运行版本，公网域名、HTTPS、反向代理和公网发布未配置。`localhost` 发布链接仅适用于本机访问。
 - 前端静态服务需要 SPA 路由回退；`/api` 转发至 8765，SSE 路由关闭代理缓冲并设置合理超时。修改后端端口时需同步修改前端 Vite 代理。
 - 8124 预览/发布服务使用独立来源；生产应使用独立域名，业务 Cookie 不共享给生成网站。多个生成站点当前共用预览服务来源，不提供跨应用独立 Cookie / localStorage 容器。
 - 生产配置需设置正确的 `nocode.allowed-origin`、`preview-base-url`、文件根目录，并限制 API 文档访问。

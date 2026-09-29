@@ -20,10 +20,11 @@ onMounted(() =>
 async function exit() {
   try {
     await logout();
-    await router.push("/");
-  } catch (e) {
-    error.value = (e as Error).message;
+  } catch {
+    // ignore API errors — still clear local state
   }
+  user.value = null;
+  await router.push("/");
 }
 </script>
 <template>

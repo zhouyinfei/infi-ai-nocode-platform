@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Terminal, MoreHorizontal } from "lucide-vue-next";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { AppItem } from "../types";
-defineProps<{ app: AppItem; index?: number; publicCard?: boolean }>();
+const props = defineProps<{ app: AppItem; index?: number; publicCard?: boolean }>();
 defineEmits<{ open: [app: AppItem]; edit: [app: AppItem] }>();
 const showPublishHint = ref(false);
+const coverFailed = ref(false);
+watch(() => props.app.cover, () => { coverFailed.value = false; });
 </script>
 <template>
   <article class="app-card">
@@ -13,10 +15,11 @@ const showPublishHint = ref(false);
       :class="`cover-${(index || 0) % 4}`"
     >
       <img
-        v-if="app.cover"
+        v-if="app.cover && !coverFailed"
         :src="app.cover"
         :alt="app.appName"
         loading="lazy"
+        @error="coverFailed = true"
       />
       <div v-else class="placeholder-window">
         <div class="window-dots"><i></i><i></i><i></i></div>

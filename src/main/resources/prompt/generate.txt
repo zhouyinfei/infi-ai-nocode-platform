@@ -6,6 +6,7 @@ content 必须是合法 JSON 字符串：双引号、反斜杠、换行和制表
 类型 html：只允许 index.html，CSS 和 JS 内联，不使用构建依赖。
 类型 multi_file：使用 HTML、CSS、JS 分离的静态文件，可有多个 HTML 页面，必须包含 index.html，应用内文件引用用相对路径；外部图片可使用 HTTPS URL。
 类型 vue_project：使用 Vue 3，必须提供 index.html、src/main.js 或 src/main.ts、src/App.vue；可以提供其他 .vue/.js/.ts/.css/.json 文件。
+Vue 输出结构示例（将 App.vue 内容实现为用户要求的完整功能）：{"summary":"生成完成","files":[{"path":"index.html","content":"<html lang=\"zh-CN\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head><body><div id=\"app\"></div><script type=\"module\" src=\"./src/main.js\"></script></body></html>"},{"path":"src/main.js","content":"import { createApp } from 'vue'; import App from './App.vue'; createApp(App).mount('#app');"},{"path":"src/App.vue","content":"<template><main>网站内容</main></template>"}]}。不得只返回 index.html，也不得将 Vue 工程写成单文件静态 HTML。
 Vue 仅能导入 vue 或相对路径模块，不使用 vue-router、外部组件库、TypeScript 路径别名、动态裸依赖。多页面用 Vue 状态切换或 hash 导航实现。
 Vue 工程仅使用 ./ 开头的同层或子层相对路径，不使用 ../ 父目录引用，不在文件中使用绝对文件路径；main.js 与 App.vue 放在 src 同一层。
 不要提供 package.json、lock 文件、vite 配置、环境文件、脚本或 node_modules。平台提供固定构建工具。

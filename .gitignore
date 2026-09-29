@@ -4,6 +4,7 @@
 /tmp/
 /.tools/
 /src/main/resources/application-local.yml
+/src/main/resources/application-prod.yml
 /.idea/
 *.log
 .DS_Store

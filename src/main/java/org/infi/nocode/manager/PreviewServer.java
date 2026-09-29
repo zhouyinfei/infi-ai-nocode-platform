@@ -52,7 +52,7 @@ public class PreviewServer {
         .set("infi:nocode:preview:" + token, appId + ":" + version, Duration.ofHours(1));
     // 票据相当于临时访问凭证，日志仅记录应用及版本。
     log.debug("Preview ticket issued: appId={}, version={}", appId, version);
-    return p.previewBaseUrl() + "/preview/" + token + "/index.html";
+    return p.previewBaseUrl().replaceAll("/+$", "") + "/preview/" + token + "/index.html";
   }
 
   /** 根据发布标识构造公开访问地址。 */
@@ -61,6 +61,7 @@ public class PreviewServer {
   }
 
   private void serve(HttpExchange x) {
+    String stage = "route";
     try {
       if (!Set.of("GET", "HEAD").contains(x.getRequestMethod())) {
         send(x, 405, "Method not allowed");
@@ -81,13 +82,21 @@ public class PreviewServer {
       Path root;
       CodeGenType type;
       if (parts[1].equals("preview")) {
+        stage = "preview-ticket";
         String value = redis.opsForValue().get("infi:nocode:preview:" + parts[2]);
-        if (value == null) throw new IllegalArgumentException();
-        String[] v = value.split(":");
+        if (value == null) {
+          send(x, 410, "预览票据已过期或不存在，请点击工作台右上角的刷新预览。");
+          return;
+        }
+        if (!value.matches("[0-9]+:[a-f0-9-]{36}"))
+          throw new IllegalStateException("Invalid preview ticket data");
+        String[] v = value.split(":", 2);
+        stage = "preview-artifact";
         var app = store.app(v[0]);
         type = CodeGenType.of(app.codeGenType());
         root = files.site(app.id(), v[1], type);
       } else if (parts[1].equals("site")) {
+        stage = "published-artifact";
         var app = store.published(parts[2]).orElseThrow();
         type = CodeGenType.of(app.codeGenType());
         Path base = files.deployRoot(parts[2]);
@@ -112,8 +121,15 @@ public class PreviewServer {
         target = root.resolve("index.html");
       String name = target.getFileName().toString().toLowerCase(Locale.ROOT);
       if (!name.matches(".*\\.(html|css|js|svg|png|jpg|jpeg|webp|ico|woff2?)$")
-          || !Files.isRegularFile(target)
           || Files.isSymbolicLink(target)) throw new IllegalArgumentException();
+      if (!Files.isRegularFile(target)) {
+        log.warn("Preview resource missing: stage={}", stage);
+        send(x, 404, parts[1].equals("preview")
+            ? "预览文件不存在。请管理员检查 code_output 目录、当前版本文件及服务启动目录。"
+            : "发布文件不存在。");
+        return;
+      }
+      stage = "response-headers";
       String mime =
           name.endsWith("html")
               ? "text/html; charset=utf-8"
@@ -129,22 +145,24 @@ public class PreviewServer {
       x.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
       x.getResponseHeaders().set("Cache-Control", "no-store");
       x.getResponseHeaders().set("Referrer-Policy", "no-referrer");
+      // Opaque-origin sandboxed pages need CORS for local ES modules and fonts.
+      x.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
       x.getResponseHeaders()
           .set(
               "Content-Security-Policy",
               "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self'"
                   + " 'unsafe-inline'; img-src 'self' data: https:; connect-src 'none'; frame-src"
                   + " 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox"
-                  + " allow-scripts allow-same-origin allow-forms");
+                  + " allow-scripts allow-forms"
+                  + (sameOrigin(p.previewBaseUrl(), p.allowedOrigin()) ? "" : " allow-same-origin"));
       if (x.getRequestMethod().equals("HEAD")) {
         x.sendResponseHeaders(200, -1);
       } else {
         if (parts[1].equals("preview") && name.endsWith(".html")) {
           // Instrument only the ticketed preview response; artifacts and published sites stay clean.
-          String script;
-          try (var resource = new org.springframework.core.io.ClassPathResource("preview-editor.js").getInputStream()) {
-            script = new String(resource.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-          }
+          stage = "preview-editor-resource";
+          String script = loadEditorScript();
+          stage = "preview-html-read";
           String html = Files.readString(target);
           String bridge = "<script>" + script + "</script>";
           var head = java.util.regex.Pattern.compile("<head\\b[^>]*>", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(html);
@@ -160,9 +178,13 @@ public class PreviewServer {
         }
       }
     } catch (Exception e) {
-      log.debug("Preview request could not be served: category={}", e.getClass().getSimpleName());
+      // Do not log request URLs, ticket values, or exception messages containing private paths.
+      boolean notFound = e instanceof IllegalArgumentException || e instanceof NoSuchElementException
+          || (e instanceof org.infi.nocode.exception.BusinessException b && b.status() == 404);
+      log.warn("Preview request failed: stage={}, category={}", stage, e.getClass().getSimpleName());
       try {
-        send(x, 404, "Page not found or preview expired");
+        send(x, notFound ? 404 : 503, notFound ? "页面或应用不存在。请刷新预览。"
+            : "预览服务暂时不可用，请管理员检查后端日志。故障阶段：" + stage);
       } catch (Exception ignored) {
       }
     } finally {
@@ -170,8 +192,33 @@ public class PreviewServer {
     }
   }
 
+  static String loadEditorScript() throws java.io.IOException {
+    // HttpServer worker threads may have the system context loader, which cannot
+    // see BOOT-INF/classes in an executable Spring Boot JAR. Use our defining loader.
+    try (var resource = new org.springframework.core.io.ClassPathResource(
+        "/preview-editor.js", PreviewServer.class).getInputStream()) {
+      return new String(resource.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+  }
+
+  private static boolean sameOrigin(String first, String second) {
+    if (first == null || second == null) return true;
+    URI a = URI.create(first), b = URI.create(second);
+    int aPort = a.getPort() < 0 ? ("https".equalsIgnoreCase(a.getScheme()) ? 443 : 80) : a.getPort();
+    int bPort = b.getPort() < 0 ? ("https".equalsIgnoreCase(b.getScheme()) ? 443 : 80) : b.getPort();
+    return a.getScheme().equalsIgnoreCase(b.getScheme())
+        && a.getHost().equalsIgnoreCase(b.getHost()) && aPort == bPort;
+  }
+
   private void send(HttpExchange x, int status, String text) throws java.io.IOException {
+    x.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+    x.getResponseHeaders().set("Cache-Control", "no-store");
+    x.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
     byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    if (x.getRequestMethod().equals("HEAD")) {
+      x.sendResponseHeaders(status, -1);
+      return;
+    }
     x.sendResponseHeaders(status, bytes.length);
     x.getResponseBody().write(bytes);
   }

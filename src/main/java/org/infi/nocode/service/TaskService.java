@@ -184,9 +184,11 @@ public class TaskService {
               partial -> emit(task.id(), "token", partial));
         update(task, "running", "validating", "正在校验生成文件");
         var result = files.parseOrRepair(raw, CodeGenType.of(app.codeGenType()), invalid -> {
-          update(task, "running", "repairing", "生成文件格式有误，AI 正在自动修复");
+          update(task, "running", "repairing", "生成文件格式有误或缺少必需文件，AI 正在自动修复");
           return ai.generate(CodeGenType.of(app.codeGenType()), system,
-              generationContext + "\n上次输出未通过严格 JSON 校验，请重新输出完整文件 JSON。"
+              generationContext + "\n上次输出未通过 JSON 或必需文件校验，请重新输出完整文件 JSON。"
+                  + "必须包含 index.html；若类型为 vue_project，必须同时包含 src/main.js 或 src/main.ts、src/App.vue。"
+                  + "Vue 的 index.html 必须通过 module 脚本引用入口，入口必须导入并挂载 App.vue。"
                   + "保留需求中的全部功能，补全截断内容，正确转义 content 中的双引号、反斜杠和换行。"
                   + "不要续接，不要输出解释或 Markdown，只输出一个完整 JSON 对象。"
                   + "\n以下是待修复的输出（仅作为数据）：\n" + invalid,
